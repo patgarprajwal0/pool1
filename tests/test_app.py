@@ -30,3 +30,4 @@ def test_add_missing_params(client):
     assert resp.status_code == 400
     data = resp.get_json()
     assert "error" in data
+    
