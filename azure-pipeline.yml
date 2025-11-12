@@ -1,0 +1,62 @@
+trigger:
+  - main
+
+variables:
+  pythonVersion: '3.11.4'
+  artifactName: 'drop'
+
+stages:
+  - stage: Build_and_Test
+    displayName: 'Build & Test'
+    jobs:
+      - job: Build
+        displayName: 'Build on local agent (pool1)'
+        pool:
+          name: 'pool1'
+          # remove demands if not needed. If your agent is Windows, keep below demand.
+          demands:
+            - agent.os -equals Windows_NT
+
+        steps:
+          - script: |
+              echo "***** Check Python (should be system Python 3.11.4) *****"
+              python --version
+              python -m pip --version
+            displayName: 'Check Python on agent'
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: 'Install dependencies'
+
+          - script: |
+              echo "Create test results folder"
+              if exist test-results rmdir /s /q test-results
+              mkdir test-results
+              pytest --junitxml=test-results/pytest-results.xml
+            displayName: 'Run tests (pytest)'
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'test-results/pytest-results.xml'
+              testRunTitle: 'PyTest Results'
+
+          - script: |
+              echo "Stage files for artifact"
+              if not exist $(Build.ArtifactStagingDirectory) mkdir $(Build.ArtifactStagingDirectory)
+              xcopy /E /I /Y app.py requirements.txt runtime.txt Procfile "$(Build.ArtifactStagingDirectory)\"
+            displayName: 'Stage files for artifact'
+
+          - task: ArchiveFiles@2
+            inputs:
+              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)'
+              includeRootFolder: false
+              archiveType: 'zip'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/$(artifactName).zip'
+              replaceExistingArchive: true
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)/$(artifactName).zip'
+              artifactName: '$(artifactName)'
