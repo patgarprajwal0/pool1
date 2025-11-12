@@ -13,28 +13,32 @@ stages:
         displayName: 'Build on local agent (pool1)'
         pool:
           name: 'pool1'
-          # remove demands if not needed. If your agent is Windows, keep below demand.
           demands:
             - agent.os -equals Windows_NT
 
         steps:
+          - checkout: self
+
           - script: |
-              echo "***** Check Python (should be system Python 3.11.4) *****"
+              Write-Host "***** Check Python (system) *****"
               python --version
               python -m pip --version
             displayName: 'Check Python on agent'
+            shell: powershell
 
           - script: |
               python -m pip install --upgrade pip
               pip install -r requirements.txt
             displayName: 'Install dependencies'
+            shell: powershell
 
           - script: |
-              echo "Create test results folder"
-              if exist test-results rmdir /s /q test-results
-              mkdir test-results
-              pytest --junitxml=test-results/pytest-results.xml
+              if (Test-Path test-results) { Remove-Item -Recurse -Force test-results }
+              New-Item -ItemType Directory -Path test-results | Out-Null
+              pytest -q tests --junitxml=test-results/pytest-results.xml
+              exit $LASTEXITCODE
             displayName: 'Run tests (pytest)'
+            shell: powershell
 
           - task: PublishTestResults@2
             inputs:
@@ -42,11 +46,34 @@ stages:
               testResultsFiles: 'test-results/pytest-results.xml'
               testRunTitle: 'PyTest Results'
 
+          # ---------- Staging step (robust PowerShell) ----------
           - script: |
-              echo "Stage files for artifact"
-              if not exist $(Build.ArtifactStagingDirectory) mkdir $(Build.ArtifactStagingDirectory)
-              xcopy /E /I /Y app.py requirements.txt runtime.txt Procfile "$(Build.ArtifactStagingDirectory)\"
-            displayName: 'Stage files for artifact'
+              Write-Host "Stage files for artifact (PowerShell)"
+              $dst = "$(Build.ArtifactStagingDirectory)"
+              Write-Host "Artifact staging directory: $dst"
+              if (-not (Test-Path -Path $dst)) {
+                Write-Host "Creating artifact staging directory..."
+                New-Item -ItemType Directory -Path $dst | Out-Null
+              }
+              # list files we want to copy (adjust as needed)
+              $files = @("app.py","requirements.txt","runtime.txt","Procfile")
+              foreach ($f in $files) {
+                if (Test-Path -Path $f) {
+                  Write-Host "Copying $f -> $dst"
+                  Copy-Item -Path $f -Destination $dst -Force -Recurse
+                } else {
+                  Write-Host "Warning: $f not found — skipping"
+                }
+              }
+              # also copy tests folder if you want packaged artifacts to include tests
+              if (Test-Path -Path ".\tests") {
+                Write-Host "Copying tests folder -> $dst\tests"
+                Copy-Item -Path ".\tests" -Destination (Join-Path $dst "tests") -Recurse -Force
+              }
+              Write-Host "Contents of artifact staging directory:"
+              Get-ChildItem -Path $dst -Recurse | ForEach-Object { Write-Host $_.FullName }
+            displayName: 'Stage files for artifact (PowerShell)'
+            shell: powershell
 
           - task: ArchiveFiles@2
             inputs:
