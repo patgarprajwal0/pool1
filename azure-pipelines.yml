@@ -46,32 +46,28 @@ stages:
               testResultsFiles: 'test-results/pytest-results.xml'
               testRunTitle: 'PyTest Results'
 
-          # ---------- Staging step (robust PowerShell) ----------
           - script: |
-              Write-Host "Stage files for artifact (PowerShell)"
+              Write-Host "***** Stage files for artifact (PowerShell safe for spaces) *****"
               $dst = "$(Build.ArtifactStagingDirectory)"
-              Write-Host "Artifact staging directory: $dst"
+              Write-Host "Artifact staging directory is: $dst"
+
               if (-not (Test-Path -Path $dst)) {
-                Write-Host "Creating artifact staging directory..."
+                Write-Host "Creating artifact directory..."
                 New-Item -ItemType Directory -Path $dst | Out-Null
               }
-              # list files we want to copy (adjust as needed)
-              $files = @("app.py","requirements.txt","runtime.txt","Procfile")
+
+              $files = @("app.py", "requirements.txt", "runtime.txt", "Procfile")
               foreach ($f in $files) {
                 if (Test-Path -Path $f) {
-                  Write-Host "Copying $f -> $dst"
-                  Copy-Item -Path $f -Destination $dst -Force -Recurse
+                  Write-Host "Copying $f → $dst"
+                  Copy-Item -Path $f -Destination $dst -Force
                 } else {
                   Write-Host "Warning: $f not found — skipping"
                 }
               }
-              # also copy tests folder if you want packaged artifacts to include tests
-              if (Test-Path -Path ".\tests") {
-                Write-Host "Copying tests folder -> $dst\tests"
-                Copy-Item -Path ".\tests" -Destination (Join-Path $dst "tests") -Recurse -Force
-              }
-              Write-Host "Contents of artifact staging directory:"
-              Get-ChildItem -Path $dst -Recurse | ForEach-Object { Write-Host $_.FullName }
+
+              Write-Host "`nFinal contents of $dst:"
+              Get-ChildItem -Recurse -Path $dst | ForEach-Object { Write-Host $_.FullName }
             displayName: 'Stage files for artifact (PowerShell)'
             shell: powershell
 
