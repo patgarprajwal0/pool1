@@ -7,3 +7,5 @@ venv/
 .vscode/
 .idea/
 _work/
+test-results/
+.coverage
